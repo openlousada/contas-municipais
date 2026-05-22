@@ -1,0 +1,36 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "contas-municipais"
+version = "0.1.0"
+description = "Framework para parsing de relatórios financeiros de municípios portugueses (POCAL e SNC-AP)"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+keywords = ["portugal", "municípios", "sncap", "pocal", "finanças", "open-data", "civic-tech", "pdf"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+]
+dependencies = [
+    "pdfplumber>=0.11",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-cov"]
+
+[project.urls]
+Homepage = "https://github.com/openlousada/contas-municipais"
+Repository = "https://github.com/openlousada/contas-municipais"
+Issues = "https://github.com/openlousada/contas-municipais/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/contas_municipais"]
