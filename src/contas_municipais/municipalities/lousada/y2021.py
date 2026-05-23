@@ -1,26 +1,8 @@
 """
 Parser for fiscal year 2021.
 
-Source: prestacao_contas_2021.pdf (combined, 44 MB, 179 pages, scanned)
-Format: SNC-AP Relatório de Gestão (combined with full financial statements)
-OCR: Mistral OCR (mistral-ocr-latest) — output cached as .mistral.txt
-Validated: 2026-05-18 — all revenue, expenditure, and indicator values verified against OCR.
-
-Key decisions:
-- OCR text has numbers with space-thousands-separator ("28 867 641,06") — handled by _PT_NUM regex.
-- Quadro 4 indicator table rows span two lines (label line + formula/values line).
-  _find() looks ahead to the next line when no numbers found on label line.
-- Quadro 4 columns: "2020 | 2021" — current (2021) = rightmost = col -1.
-- net_result: 2,710,806.51 € — from DR P&L "Resultado líquido do período", col 0 (31/12/2021).
-  Confirmed via "Proposta de Aplicação de Resultados": 2 710 806,51 €.
-- total_debt: 13,426,992.98 — from "Dívida Total" table (single value, 2021 column only).
-- debt_limit_dgal: 39,403,731.15 — from "Limite Dívida Total DGAL".
-- Margem Absoluta: not shown in document — excluded.
-- Staff: no "funcionários de quadro" paragraph in 2021 document — staff = None.
-- "OUTRAS RECEITAS" (exec-only row, 13,752.48): captured as outras_receitas subcategory.
-- ACTIVOS FINANCEIROS expenditure: budget 32,945.75, no execution value.
-- OUTRAS RECEITAS DE CAPITAL: budget 290,000.00, no execution value.
-- SALDO DA GERÊNCIA ANTERIOR: budget 3,427,182.39, no execution value.
+Source: prestacao_contas_2021.pdf (179 pages, scanned), SNC-AP format
+OCR: Mistral OCR — output cached as .mistral.txt
 """
 from pathlib import Path
 from contas_municipais.base import ParseResult, find_numbers, slice_section, parse_snc_table
@@ -64,7 +46,6 @@ EXPENDITURE_CATEGORIES = {
 
 
 def parse(files: dict[str, Path]) -> ParseResult:
-    # 2021 is scanned — use Mistral OCR cache
     pdf = files["prestacao_contas"]
     txt_cache = pdf.with_suffix(".mistral.txt")
     if not txt_cache.exists():
@@ -77,15 +58,14 @@ def parse(files: dict[str, Path]) -> ParseResult:
     result.revenue     = _parse_revenue(text)
     result.expenditure = _parse_expenditure(text)
     result.indicators  = _parse_indicators(text)
-    result.staff       = None  # not available in 2021 document
+    result.staff = None
     return result
 
 
 def _parse_revenue(text: str) -> list[dict]:
     section = slice_section(text, "quadro 1", "1.2 execução da despesa")
     rows = parse_snc_table(section, REVENUE_CATEGORIES, YEAR)
-    # "OUTRAS RECEITAS" appears twice in the table (empty group header + exec-only row).
-    # parse_snc_table picks the first match (empty). Fix: use the second row (13,752.48 exec).
+    # "OUTRAS RECEITAS" appears twice; parse_snc_table picks the first (empty) match — override.
     for row in rows:
         if row["category"] == "outras_receitas":
             row["budget_amount"]   = None
@@ -111,21 +91,19 @@ def _parse_indicators(text: str) -> list[dict]:
             if any(ex.lower() in line.lower() for ex in excludes):
                 continue
             nums = find_numbers(line)
-            # Quadro 4 rows span two lines — look ahead if no numbers on label line
             if not nums and i + 1 < len(lines):
                 nums = find_numbers(lines[i + 1])
             if nums and (0 <= col < len(nums) or (col < 0 and len(nums) >= -col)):
                 ind.append({"year": YEAR, "indicator_key": key, "label_pt": label, "value": nums[col], "unit": unit})
                 return
 
-    # Quadro 4 — financial ratios; columns: "2020 | 2021", current = col -1 (rightmost)
+    # Columns: prior | current; current year = col -1
     _find("Liquidez geral",      [],                         -1, "liquidity_general",   "ratio", "Liquidez geral")
     _find("Liquidez reduzida",   [],                         -1, "liquidity_reduced",   "ratio", "Liquidez reduzida")
     _find("Liquidez imediata",   [],                         -1, "liquidity_immediate", "ratio", "Liquidez imediata")
     _find("Solvabilidade",       [],                         -1, "solvency",            "ratio", "Solvabilidade")
     _find("Autonomia financeira",["Rendibilidade"],          -1, "financial_autonomy",  "%",     "Autonomia financeira")
 
-    # Debt section — each value has only one column in the 2021 table
     debt_section = slice_section(text, "2.3. Limite da Dívida Total", "3. Proposta")
     for i, line in enumerate(debt_section.split("\n")):
         if "dívida total" in line.lower() and "limite" not in line.lower():
@@ -140,7 +118,7 @@ def _parse_indicators(text: str) -> list[dict]:
                 ind.append({"year": YEAR, "indicator_key": "debt_limit_dgal", "label_pt": "Limite Dívida Total DGAL", "value": nums[0], "unit": "€"})
                 break
 
-    # Net result: DR P&L, LEFT column = 31/12/2021 (current year)
+    # P&L: LEFT column = current year.
     _find("Resultado líquido do período", ["resultado líquido/"], 0, "net_result", "€", "Resultado líquido do período")
 
     return ind

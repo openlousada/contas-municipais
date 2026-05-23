@@ -2,30 +2,7 @@
 Parser for fiscal year 2013.
 
 Source: 1383_original.pdf (1.6 MB, scanned), POCAL format
-Format: POCAL Mapa do Controlo Orçamental da Receita + Despesa (economic classification)
-OCR: Mistral OCR (mistral-ocr-latest) — output cached as .mistral.txt
-Validated: 2026-05-18 — all revenue and expenditure values verified against OCR text.
-
-Key decisions:
-- POCAL format (not SNC-AP). Numbers use dot-thousands, comma-decimal ("22.089.484,37").
-- OCR produces pipe-delimited markdown tables (same structure as 2014/2015/2017).
-- Pct values are mixed: period-decimal ("97.6", "95.24") and comma-decimal ("85,54", "75,06").
-  _PCT_PERIOD_END checked first; comma-decimal pct falls through to nums[-1] fallback.
-- Revenue executed: cobrada_líquida = mode of repeated values in nums[1:] (same as 2014/2015).
-- Expenditure executed: same 2015 logic — if nums[3] > nums[1]: paga=nums[4]; else paga=nums[3].
-- Code matching: pipe-based (r"^\\|\\s+0*CODE\\s*\\|") — same as 2014/2015/2017.
-- Expenditure section: slice_section(text, "ORÇAMENTAL DA DESPESA", "ORGÂNI").
-  Page 1 header reads "CONTROLE" (not "CONTROLO"), so searching for "CONTROLO ORÇAMENTAL
-  DA DESPESA" misses page 1 and starts from page 2 — must use shorter keyword.
-- Expenditure code 10 (PASSIVOS FINANCEIROS): the economic section has a multi-line OCR
-  block for codes 10-11 at the end of page 4. Instead, the organic classification section
-  (first occurrence after "ORGÂNI") has a clean single-row for code 10 at its aggregate level.
-  A global search for the first pipe-table code-10 row with ≥4 numbers finds it correctly.
-- Budget values for codes 01 (PESSOAL: OCR "18.498.339,38" ≈ correct "10.498.339,38") and
-  02 (BENS/SERVIÇOS: OCR "0.344.382,48" ≈ correct "8.344.382,48") are OCR-garbled. The
-  executed values are correct and verified by cross-checks.
-- Revenue section: slice_section(text, "CONTROLO ORÇAMENTAL DA RECEITA", "CONTABILÍSTICO").
-- No indicators or staff: document contains only budget execution maps.
+OCR: Mistral OCR — output cached as .mistral.txt
 """
 import re
 from pathlib import Path
@@ -48,10 +25,6 @@ def find_numbers(line: str) -> list[float]:
     return out
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 def _rev_executed(nums: list[float]) -> float | None:
     """Return cobrada_líquida from a POCAL revenue row (mode of repeated values in nums[1:])."""
     if len(nums) < 2:
@@ -66,9 +39,6 @@ def _rev_executed(nums: list[float]) -> float | None:
     max_count = max(freq.values())
     if max_count < 2:
         return None
-    # Tiebreaker: when multiple values have the same repeat count, prefer the larger one.
-    # In 2013 revenue rows, cobrada_líquida (large) and por-cobrar carry-over (small) can both
-    # repeat exactly twice; the larger value is always the correct cobrada_líquida.
     return max((k for k, c in freq.items() if c == max_count), key=lambda x: (freq[x], x))
 
 
@@ -164,10 +134,6 @@ def _find_total_data(section: str) -> str | None:
     return result
 
 
-# ---------------------------------------------------------------------------
-# Revenue
-# ---------------------------------------------------------------------------
-
 def _parse_revenue(text: str) -> list[dict]:
     sec = slice_section(text, "CONTROLO ORÇAMENTAL DA RECEITA", "CONTABILÍSTICO")
     rows = []
@@ -207,10 +173,6 @@ def _parse_revenue(text: str) -> list[dict]:
     return rows
 
 
-# ---------------------------------------------------------------------------
-# Expenditure
-# ---------------------------------------------------------------------------
-
 def _parse_expenditure(text: str) -> list[dict]:
     # Page 1 header: "CONTROLE ORÇAMENTAL DA DESPESA" (E not O).
     # Using "ORÇAMENTAL DA DESPESA" captures from page 1.
@@ -240,7 +202,7 @@ def _parse_expenditure(text: str) -> list[dict]:
     add(_find_code(sec, "08"), "transferencias_capital_desp",   "Transferências de Capital",     True)
     add(_find_code(sec, "09"), "activos_financeiros",           "Activos Financeiros",           True)
 
-    # Code 10 is in a multi-line OCR block in the economic section; find clean row in organic section.
+    # Code 10 has a multi-line OCR block in the economic section; organic section has the clean row.
     add(_find_exp_code10(text), "passivos_financeiros_desp",    "Passivos Financeiros",          True)
 
     total_line = _find_total_data(sec)
@@ -251,10 +213,6 @@ def _parse_expenditure(text: str) -> list[dict]:
 
     return rows
 
-
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
 
 def parse(files: dict[str, Path]) -> ParseResult:
     pdf = files.get("prestacao_contas") or files.get("other")
@@ -271,5 +229,5 @@ def parse(files: dict[str, Path]) -> ParseResult:
     result.revenue     = _parse_revenue(text)
     result.expenditure = _parse_expenditure(text)
     result.indicators  = []
-    result.staff       = None
+    result.staff = None
     return result

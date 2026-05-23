@@ -1,49 +1,14 @@
 """
 Parser for fiscal year 2018.
 
-Source: prestacao_de_contas.pdf (scanned)
-Format: POCAL (pre-SNC-AP reform) — "Mapa do Controlo Orçamental" format
-OCR: Mistral OCR (mistral-ocr-latest) — output cached as .mistral.txt
-Validated: 2026-05-18 — all values verified against OCR.
-
-Key differences from 2020+ (SNC-AP):
-- Uses POCAL Mapa format; parse_snc_table() does not apply.
-- Revenue columns: PREVISÕES CORRIGIDAS | ... | RECEITAS COBRADAS BRUTAS |
-  (empty reembolsos) | RECEITA COBRADA LÍQUIDA | RECEITAS POR COBRAR FINAL | GRAU EXEC
-  When reembolsos = 0 (normal), cobradas brutas == cobrada líquida, so the executed
-  value appears twice consecutively in the row's number list. We find that first
-  repeated consecutive pair as the executed amount.
-- Expenditure columns: DOTAÇÕES CORRIGIDAS | COMPROMISSOS EXERCÍCIO | FUTUROS |
-  TOTAL | DESPESA PAGA | ... | GRAU EXEC
-  When futuros = 0, nums[1] == nums[2] (exercício == total); exec = nums[3].
-  When futuros > 0, nums[1] != nums[2]; exec = nums[4].
-- Pct: some rows use period-decimal ("98.0", "92.63") instead of comma-decimal
-  ("99,63"). _PT_NUM can only parse comma-decimal, so pct is extracted from the
-  last pipe-separated cell of the row directly (_last_pct). Values > 1000
-  (e.g. rendimentos_propriedade pct=3367.2) are returned as None.
-- despesas_correntes pct: OCR reads "96.53" but the document footnote
-  formula is col11 = col7/col3*100, giving 90.53% (confirmed by the
-  narrative: "90,5%"). The correntes aggregate row has several OCR errors
-  (col4 exercício and col6 total are also garbled on the same line); "96.53"
-  is a misread of "90.53" (digit 0→6). Overridden to 90.53 in the parser.
-- Rows are found by matching the budget amount string (Portuguese dot-comma format)
-  within the sliced mapa section.
-- 2018 has an extra expenditure category vs 2019: outras_despesas_capital (code 11).
-- Expenditure OCR heading: "CONTROLE" (not "CONTROLO" as in post-2018 docs).
-- Indicators: from "RÁCIOS DE LÍQUIDEZ E SOLVABILIDADE" (columns: 2017 | 2018).
-  Current year (2018) = col -1 (rightmost).
-  net_result from Demonstração de Resultados, col 0 = N = current year.
-- Staff: no headcount paragraph in POCAL format — staff = None.
+Source: prestacao_de_contas.pdf (scanned), POCAL format
+OCR: Mistral OCR — output cached as .mistral.txt
 """
 from pathlib import Path
 
 from contas_municipais.base import ParseResult, find_numbers, slice_section
 
 YEAR = 2018
-
-# ── Category definitions ─────────────────────────────────────────────────────
-# (budget_amount, category_key, label_pt, is_subcategory)
-# Rows are located by their unique budget string within the sliced section.
 
 _REVENUE = [
     (25_322_046.85, "receitas_correntes",        "Receitas Correntes",         False),
@@ -162,8 +127,6 @@ def _find_row(lines: list[str], budget: float) -> str | None:
 # ── Section parsers ───────────────────────────────────────────────────────────
 
 def _parse_revenue(text: str) -> list[dict]:
-    # Revenue mapa starts where "PREVISÕES CORRIGIDAS" header appears in the
-    # revenue pages. Ends at the post-TOTAL signature block ("urgão executivo").
     section = slice_section(text, "previsões corrigidas", "urgão exec")
     lines = section.split("\n")
     rows = []
@@ -191,8 +154,7 @@ def _parse_revenue(text: str) -> list[dict]:
 
 
 def _parse_expenditure(text: str) -> list[dict]:
-    # Consolidated mapa: 2018 OCR uses "CONTROLE" (not "CONTROLO").
-    # Ends where the per-organic-unit mapa begins ("por classificação orgânica").
+    # OCR heading: "CONTROLE" (not "CONTROLO").
     section = slice_section(text, "controle orçamental da des", "por classificação")
     lines = section.split("\n")
     rows = []
@@ -203,8 +165,7 @@ def _parse_expenditure(text: str) -> list[dict]:
             continue
         exec_ = _exp_exec(line)
         pct = _last_pct(line)
-        # OCR misread "90.53" as "96.53" on the correntes aggregate row (digit 0→6).
-        # Override with the value mandated by the document's footnote formula col11=col7/col3*100.
+        # OCR error on correntes aggregate pct — recompute from executed/budget.
         if key == "despesas_correntes" and pct == 96.53:
             pct = round(exec_ / budget * 100, 2) if exec_ else pct
         rows.append({
@@ -244,8 +205,7 @@ def _parse_indicators(text: str) -> list[dict]:
                 })
                 return
 
-    # "RÁCIOS DE LÍQUIDEZ E SOLVABILIDADE" — columns: 2017 | 2018 → col=-1 for 2018.
-    # Values are on the continuation line (formula), so look-ahead in _find covers them.
+    # Columns: prior | current; current year = col -1.
     _find("Liquidez geral",      -1, "liquidity_general",   "ratio", "Liquidez geral")
     _find("Liquidez reduzida",   -1, "liquidity_reduced",   "ratio", "Liquidez reduzida")
     _find("Liquidez imediata",   -1, "liquidity_immediate", "ratio", "Liquidez imediata")
@@ -253,12 +213,11 @@ def _parse_indicators(text: str) -> list[dict]:
     _find("Autonomia financeira",-1, "financial_autonomy",  "%",     "Autonomia financeira",
           excludes=["Rendibilidade"])
 
-    # V - LIMITE DÍVIDA TOTAL (single-column table, col 0)
     _find("Dívida Total",        0, "total_debt",       "€", "Dívida Total",
           excludes=["Limite"])
     _find("Limite Dívida Total", 0, "debt_limit_dgal",  "€", "Limite Dívida Total DGAL")
 
-    # Demonstração de Resultados — col 0 = N (current year = 2018), col 1 = N-1 (2017).
+    # P&L: col 0 = current year.
     _find("Resultado Líquido do Exercício", 0, "net_result", "€",
           "Resultado Líquido do Exercício")
 
@@ -280,5 +239,5 @@ def parse(files: dict[str, Path]) -> ParseResult:
     result.revenue = _parse_revenue(text)
     result.expenditure = _parse_expenditure(text)
     result.indicators = _parse_indicators(text)
-    result.staff = None  # POCAL format has no headcount paragraph
+    result.staff = None  # POCAL format has no headcount section
     return result

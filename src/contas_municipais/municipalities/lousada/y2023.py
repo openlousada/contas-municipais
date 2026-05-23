@@ -2,18 +2,9 @@
 Parser for fiscal year 2023.
 
 Sources:
-  - relatorio_gestao_2023.pdf  (588 KB, native text) — revenue, expenditure, most indicators, staff
-  - prestacao_contas_2023.pdf  (8.1 MB, native text) — supplementary for net_result from P&L
-
-Format: SNC-AP Relatório de Gestão (separate relatorio_gestao file, unlike combined 2024+)
-Validated: 2026-05-18 — all values verified against PDFs.
-
-Key decisions:
-- net_result: sourced from prestacao_contas_2023.pdf P&L, LEFT column (current=2023).
-  Value: 4,461,771.21 €  Confirmed via DAPL in same document.
-  Note: relatorio_gestao_2023.pdf has a typo ("4 461 71,21") — cannot be used.
-- total_debt: labeled bare "Dívida Total" (16,566,548.70 €), not "Montante Dívida Total a 31/12".
-- Staff: 795 quadro + 8 outros = 803 total, 84 entries, 48 exits.
+  - relatorio_gestao_2023.pdf (native text) — revenue, expenditure, indicators, staff
+  - prestacao_contas_2023.pdf (native text) — net_result (relatorio_gestao has a typo)
+SNC-AP format.
 """
 from pathlib import Path
 from contas_municipais.base import ParseResult, extract_text, find_numbers, slice_section, parse_snc_table
@@ -91,20 +82,19 @@ def _parse_indicators(rg_text: str, pc_text: str) -> list[dict]:
                 ind.append({"year": YEAR, "indicator_key": key, "label_pt": label, "value": nums[col], "unit": unit})
                 return
 
-    # Quadro 4 ratios — "2022  2023" columns; current (2023) = col -1 (rightmost)
+    # Columns: prior | current; current year = col -1
     _find(section, "Autonomia financeira",         [],              -1, "financial_autonomy",  "%",     "Autonomia financeira")
     _find(section, "Liquidez geral",               [],              -1, "liquidity_general",   "ratio", "Liquidez geral")
     _find(section, "Liquidez reduzida",            [],              -1, "liquidity_reduced",   "ratio", "Liquidez reduzida")
     _find(section, "Liquidez imediata",            [],              -1, "liquidity_immediate", "ratio", "Liquidez imediata")
     _find(section, "Solvabilidade",                [],              -1, "solvency",            "ratio", "Solvabilidade")
 
-    # Debt section — bare "Dívida Total" label in 2023 (not "Montante Dívida Total a 31/12")
+    # 2023 uses bare "Dívida Total" label (not "Montante Dívida Total a 31/12")
     _find(section, "Dívida Total",   ["limite", "dgal", "01/01"],   0, "total_debt",          "€",     "Dívida Total")
     _find(section, "Limite Dívida Total DGAL",     [],               0, "debt_limit_dgal",     "€",     "Limite Dívida Total DGAL")
     _find(section, "Margem Absoluta",              [],               0, "debt_headroom",       "€",     "Margem Absoluta")
 
-    # Net result: from prestacao_contas P&L (relatorio_gestao has a typo for this value)
-    # LEFT column = current year 2023 (SNC-AP P&L format: current | comparative)
+    # net_result from prestacao_contas — relatorio_gestao has a typo; LEFT column = current year.
     _find(pc_text, "Resultado líquido do período", ["resultado líquido/"], 0, "net_result", "€", "Resultado líquido do período")
 
     return ind

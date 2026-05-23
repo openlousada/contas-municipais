@@ -1,41 +1,14 @@
 """
 Parser for fiscal year 2019.
 
-Source: prestacao_contas_2019.pdf (177 pages, scanned)
-Format: POCAL (pre-SNC-AP reform) — "Mapa do Controlo Orçamental" format
-OCR: Mistral OCR (mistral-ocr-latest) — output cached as .mistral.txt
-Validated: 2026-05-18 — all values verified against OCR.
-
-Key differences from 2020+ (SNC-AP):
-- Uses POCAL Mapa format; parse_snc_table() does not apply.
-- Revenue columns: PREVISÕES CORRIGIDAS | ... | RECEITAS COBRADAS BRUTAS |
-  (empty reembolsos) | RECEITA COBRADA LÍQUIDA | RECEITAS POR COBRAR FINAL | GRAU EXEC
-  When reembolsos = 0 (normal), cobradas brutas == cobrada líquida, so the executed
-  value appears twice consecutively in the row's number list. We find that first
-  repeated consecutive pair as the executed amount.
-- Expenditure columns: DOTAÇÕES CORRIGIDAS | COMPROMISSOS EXERCÍCIO | FUTUROS |
-  TOTAL | DESPESA PAGA | ... | GRAU EXEC
-  When futuros = 0, nums[1] == nums[2] (exercício == total); exec = nums[3].
-  When futuros > 0, nums[1] != nums[2]; exec = nums[4].
-- Pct: some pages use period-decimal ("92.43", "101.3") instead of comma-decimal
-  ("99,93"). _PT_NUM can only parse comma-decimal, so pct is extracted from the
-  last pipe-separated cell of the row directly (_last_pct).
-- Rows are found by matching the budget amount string (Portuguese dot-comma format)
-  within the consolidated mapa section, immune to OCR label typos (e.g. "DESPESSAS").
-- Indicators: from "RÁCIOS DE LIQUIDEZ E SOLVABILIDADE" (columns: 2018 | 2019).
-  Current year (2019) = col -1 (rightmost).
-  net_result from Demonstração de Resultados, col 0 = N = current year.
-- Staff: no headcount paragraph in POCAL format — staff = None.
+Source: prestacao_contas_2019.pdf (177 pages, scanned), POCAL format
+OCR: Mistral OCR — output cached as .mistral.txt
 """
 from pathlib import Path
 
 from contas_municipais.base import ParseResult, find_numbers, slice_section
 
 YEAR = 2019
-
-# ── Category definitions ─────────────────────────────────────────────────────
-# (budget_amount, category_key, label_pt, is_subcategory)
-# Rows are located by their unique budget string within the sliced section.
 
 _REVENUE = [
     (26_205_830.62, "receitas_correntes",        "Receitas Correntes",         False),
@@ -180,7 +153,6 @@ def _parse_revenue(text: str) -> list[dict]:
 
 
 def _parse_expenditure(text: str) -> list[dict]:
-    # Consolidated mapa ends where the per-organic-unit mapa begins ("por classificação").
     section = slice_section(text, "controlo orçamental da des", "por classificação")
     lines = section.split("\n")
     rows = []
@@ -228,8 +200,7 @@ def _parse_indicators(text: str) -> list[dict]:
                 })
                 return
 
-    # "RÁCIOS DE LIQUIDEZ E SOLVABILIDADE" — columns: 2018 | 2019 → col=-1 for 2019.
-    # Values are on the continuation line (formula), so look-ahead in _find covers them.
+    # Columns: prior | current; current year = col -1.
     _find("Liquidez geral",      -1, "liquidity_general",   "ratio", "Liquidez geral")
     _find("Liquidez reduzida",   -1, "liquidity_reduced",   "ratio", "Liquidez reduzida")
     _find("Liquidez imediata",   -1, "liquidity_immediate", "ratio", "Liquidez imediata")
@@ -237,12 +208,11 @@ def _parse_indicators(text: str) -> list[dict]:
     _find("Autonomia financeira",-1, "financial_autonomy",  "%",     "Autonomia financeira",
           excludes=["Rendibilidade"])
 
-    # V - LIMITE DÍVIDA TOTAL (single-column table, col 0)
     _find("Dívida Total",        0, "total_debt",       "€", "Dívida Total",
           excludes=["Limite"])
     _find("Limite Dívida Total", 0, "debt_limit_dgal",  "€", "Limite Dívida Total DGAL")
 
-    # Demonstração de Resultados — col 0 = N (current year = 2019), col 1 = N-1 (2018).
+    # P&L: col 0 = current year.
     _find("Resultado Líquido do Exercício", 0, "net_result", "€",
           "Resultado Líquido do Exercício")
 
@@ -264,5 +234,5 @@ def parse(files: dict[str, Path]) -> ParseResult:
     result.revenue = _parse_revenue(text)
     result.expenditure = _parse_expenditure(text)
     result.indicators = _parse_indicators(text)
-    result.staff = None  # POCAL format has no headcount paragraph
+    result.staff = None  # POCAL format has no headcount section
     return result

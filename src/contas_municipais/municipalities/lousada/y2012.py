@@ -2,35 +2,7 @@
 Parser for fiscal year 2012.
 
 Source: 111_original.pdf (scanned), POCAL format
-Format: POCAL Mapa do Controlo Orçamental da Receita + Despesa (economic classification)
-OCR: Mistral OCR (mistral-ocr-latest) — output cached as .mistral.txt
-Validated: 2026-05-19 — all revenue and expenditure values verified against OCR text.
-
-Key decisions:
-- POCAL format (not SNC-AP). Numbers use dot-thousands, comma-decimal ("22.089.484,37").
-- OCR produces pipe-delimited markdown tables (same structure as 2013/2014/2015).
-- No "MAPA DO CONTROLO ORÇAMENTAL DA RECEITA" header; revenue section has no labelled title.
-  Revenue slice: "PREVISÕES CORRIGIDAS" (column header) → "DESPESAS CORRENTES".
-  Expenditure slice: "DESPESAS CORRENTES" → "CLASSIFICAÇÃO ORÇÁNICA" (organic section title).
-- Pct values are mixed: period-decimal ("107.9", "59.1") and comma-decimal ("93,4", "22,4").
-  _PCT_PERIOD_END checked first; comma-decimal pct falls through to nums[-1] fallback.
-- Revenue executed: cobrada_líquida = mode of repeated values in nums[1:] (same as 2013/2014).
-  Tiebreaker: prefer larger value when two values tie on frequency.
-- Expenditure executed: 2015-logic — if nums[3] > nums[1]: paga=nums[4]; else paga=nums[3].
-- Codes 01 and 02 in expenditure appear on OCR page 1 which lacks the pct column → pct=None.
-- Code 12 (revenue, PASSIVOS FINANCEIROS): pct uses comma-decimal ("22,4") and is captured
-  by nums[-1] fallback. Cobrada_líquida = 265,545.58 repeats three times in the row.
-- No code 13 (OUTRAS RECEITAS DE CAPITAL) in 2012; capital revenue has codes 09, 10, 12 only.
-- Code 10 (expenditure, PASSIVOS FINANCEIROS): pct is period-decimal "99.82" on same page
-  as TOTAL "71.56"; both caught by _PCT_PERIOD_END before nums[-1] fallback.
-- Expenditure code 10 (PASSIVOS FINANCEIROS): economic section shows OCR-garbled
-  1.088.086,99 instead of correct 1.048.086,99. Fixed by _find_exp_code10() which finds
-  the value from the organic classification section (pct 99.82% confirms 1048086.99).
-- Expenditure DESPESAS DE CAPITAL aggregate row: OCR error (~30,000.20 diff vs sum of
-  codes). Individual code values are correct (each consistent with its own pct).
-  total_despesas is correct: 18,735,579.19 (correntes) + 10,230,751.04 (capital codes) =
-  28,966,330.23. The aggregate row 10,200,751.84 is the only OCR-erroneous value.
-- No indicators or staff: document contains only budget execution maps.
+OCR: Mistral OCR — output cached as .mistral.txt
 """
 import re
 from pathlib import Path
@@ -52,10 +24,6 @@ def find_numbers(line: str) -> list[float]:
             pass
     return out
 
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 def _rev_executed(nums: list[float]) -> float | None:
     """Return cobrada_líquida from a POCAL revenue row (mode of repeated values in nums[1:])."""
@@ -166,10 +134,6 @@ def _find_total_data(section: str) -> str | None:
     return result
 
 
-# ---------------------------------------------------------------------------
-# Revenue
-# ---------------------------------------------------------------------------
-
 def _parse_revenue(text: str) -> list[dict]:
     # Revenue section has no "MAPA DO CONTROLO ORÇAMENTAL DA RECEITA" header.
     # Use the column-header phrase "PREVISÕES CORRIGIDAS" as start marker.
@@ -198,7 +162,6 @@ def _parse_revenue(text: str) -> list[dict]:
     add(_find_code(sec, "09"), "vendas_bens_investimento",  "Vendas de Bens de Investimento",     True)
     add(_find_code(sec, "10"), "transferencias_capital",    "Transferências de Capital",           True)
     add(_find_code(sec, "12"), "passivos_financeiros_rec",  "Passivos Financeiros",               True)
-    # No code 13 in 2012 capital revenue section.
 
     add(_find_code(sec, "16"), "saldo_gerencia_anterior",   "Saldo da Gerência Anterior",         False)
 
@@ -210,10 +173,6 @@ def _parse_revenue(text: str) -> list[dict]:
 
     return rows
 
-
-# ---------------------------------------------------------------------------
-# Expenditure
-# ---------------------------------------------------------------------------
 
 def _parse_expenditure(text: str) -> list[dict]:
     sec = slice_section(text, "DESPESAS CORRENTES", "CLASSIFICAÇÃO ORÇÁNICA")
@@ -240,8 +199,7 @@ def _parse_expenditure(text: str) -> list[dict]:
     add(_find_code(sec, "07"), "aquisicao_bens_capital",        "Aquisição de Bens de Capital",  True)
     add(_find_code(sec, "08"), "transferencias_capital_desp",   "Transferências de Capital",     True)
     add(_find_code(sec, "09"), "activos_financeiros",           "Activos Financeiros",           True)
-    # Code 10 in the economic section has OCR digit error (1.088.086,99 vs correct 1.048.086,99).
-    # Use the organic classification section which has the correct value.
+    # Code 10 economic section has an OCR digit error; use organic section instead.
     add(_find_exp_code10(text), "passivos_financeiros_desp",    "Passivos Financeiros",          True)
 
     total_line = _find_total_data(sec)
@@ -252,10 +210,6 @@ def _parse_expenditure(text: str) -> list[dict]:
 
     return rows
 
-
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
 
 def parse(files: dict[str, Path]) -> ParseResult:
     pdf = files.get("prestacao_contas") or files.get("other")
@@ -272,5 +226,5 @@ def parse(files: dict[str, Path]) -> ParseResult:
     result.revenue     = _parse_revenue(text)
     result.expenditure = _parse_expenditure(text)
     result.indicators  = []
-    result.staff       = None
+    result.staff = None
     return result

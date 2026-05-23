@@ -1,30 +1,8 @@
 """
 Parser for fiscal year 2016.
 
-Source: 3188_original.pdf (144 KB, ~8 pages, native digital PDF), POCAL format
-Format: POCAL Mapa do Controlo Orçamental da Receita + Despesa (economic classification only)
-Text extraction: pdftotext -layout (no OCR needed — native text PDF)
-Validated: 2026-05-18 — all revenue and expenditure values verified against extracted text.
-
-Key decisions:
-- POCAL format (not SNC-AP): data is in "MAPA DO CONTROLO ORÇAMENTAL DA RECEITA/DESPESA".
-  Numbers use dot-thousands, comma-decimal (e.g. "22.938.755,19").
-- Text extraction: uses extract_text() from _base (pdftotext -layout), no Mistral OCR.
-- Revenue executed value: cobrada_líquida (col 10 = col 7 - col 9) always repeats 2+ times
-  in each row (equals cobradas_brutas when no reembolsos). _rev_executed() returns mode of
-  nums[1:] after stripping the pct.
-- Expenditure executed value: same futuros-detection logic as 2017.
-  No futuros (nums[1]==nums[2]): despesa_paga=nums[3].
-  Futuros present (nums[1]!=nums[2] and nums[2]>100): despesa_paga=nums[4].
-- Pct column uses period-decimal ("102.2", "90.77") — not matched by the comma-decimal
-  _PT_NUM regex. Captured via _PCT_PERIOD_END fallback in _row().
-- Code matching: space-based regex (r"^\\s{0,4}0*CODE\\s{2,}") — not pipe-based like 2017,
-  because pdftotext produces fixed-width columns, not markdown tables.
-- SALDO DA GERÊNCIA ANTERIOR (code 16): single number on the line (budget only).
-  _rev_executed returns None (len<2) — no special casing needed.
-- No indicators: document contains only the budget execution maps, not the full
-  Relatório de Gestão. Indicators are unavailable for 2016.
-- Document has no organic classification section — only economic classification.
+Source: 3188_original.pdf (~8 pages, native text), POCAL format
+Text extraction: pdftotext -layout
 """
 import re
 from pathlib import Path
@@ -35,10 +13,6 @@ YEAR = 2016
 # Pct values use period-decimal ("102.2", "90.77") at line end — not matched by _PT_NUM.
 _PCT_PERIOD_END = re.compile(r"(\d{1,3})\.(\d{1,2})\s*$")
 
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 def _rev_executed(nums: list[float]) -> float | None:
     """Return cobrada_líquida (executed) from a POCAL revenue row.
@@ -84,8 +58,6 @@ def _row(line: str | None, year: int, slug: str, label: str, is_subcategory: boo
         return None
     budget = nums[0]
     pct_threshold = 300 if mode == "rev" else 200
-    # Period-decimal pct at line end takes priority (all pct values in 2016 use this format).
-    # Fallback to nums[-1] for any comma-decimal pct (none expected in 2016).
     pct = None
     m = _PCT_PERIOD_END.search(line.rstrip())
     if m:
@@ -145,10 +117,6 @@ def _find_total_data(section: str) -> str | None:
     return result
 
 
-# ---------------------------------------------------------------------------
-# Revenue
-# ---------------------------------------------------------------------------
-
 def _parse_revenue(text: str) -> list[dict]:
     sec = slice_section(text, "CONTROLO ORÇAMENTAL DA RECEITA", "CONTROLO ORÇAMENTAL DA DESPESA")
     rows = []
@@ -177,7 +145,6 @@ def _parse_revenue(text: str) -> list[dict]:
     add(_find_code(sec, "12"), "passivos_financeiros_rec",   "Passivos Financeiros",               True)
     add(_find_code(sec, "13"), "outras_receitas_capital",    "Outras Receitas de Capital",         True)
 
-    # SALDO DA GERÊNCIA ANTERIOR (code 16): budget only, single number on the line.
     add(_find_code(sec, "16"), "saldo_gerencia_anterior",    "Saldo da Gerência Anterior",         False)
 
     total_line = _find_total_data(sec)
@@ -188,10 +155,6 @@ def _parse_revenue(text: str) -> list[dict]:
 
     return rows
 
-
-# ---------------------------------------------------------------------------
-# Expenditure
-# ---------------------------------------------------------------------------
 
 def _parse_expenditure(text: str) -> list[dict]:
     sec = slice_section(text, "CONTROLO ORÇAMENTAL DA DESPESA", "Orgão Deliberativo")
@@ -229,10 +192,6 @@ def _parse_expenditure(text: str) -> list[dict]:
     return rows
 
 
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
-
 def parse(files: dict[str, Path]) -> ParseResult:
     pdf = files.get("pocal_orcamental") or files.get("prestacao_contas") or files.get("other")
     if pdf is None:
@@ -242,5 +201,5 @@ def parse(files: dict[str, Path]) -> ParseResult:
     result.revenue     = _parse_revenue(text)
     result.expenditure = _parse_expenditure(text)
     result.indicators  = []
-    result.staff       = None
+    result.staff = None
     return result

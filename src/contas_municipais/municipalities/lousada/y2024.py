@@ -1,15 +1,7 @@
 """
 Parser for fiscal year 2024.
 
-Source: prestacao_contas_2024.pdf (combined, 9.7 MB, native text)
-Format: SNC-AP Relatório de Gestão
-Validated: 2026-05-18 — all revenue, expenditure, and indicator values verified against PDF.
-
-Key decisions:
-- net_result: taken from P&L "Resultado líquido do período" LEFT column (current year = left in SNC-AP).
-  Confirmed via DAPL: 4,532,145.06 €
-- total_debt: "Montante Dívida Total a 31/12/2024" line; exclude "01/01" (start-of-year) line.
-- Staff: PDF paragraph states 805 permanent + 10 other = 815 derived total.
+Source: prestacao_contas_2024.pdf (native text), SNC-AP format
 """
 from pathlib import Path
 from contas_municipais.base import ParseResult, extract_text, find_numbers, slice_section, parse_snc_table
@@ -87,20 +79,18 @@ def _parse_indicators(text: str) -> list[dict]:
                 ind.append({"year": YEAR, "indicator_key": key, "label_pt": label, "value": nums[col], "unit": unit})
                 return
 
-    # Quadro 4 ratios — values appear as "2023  2024" (prior | current); current = col 1 (index -1)
+    # Columns: prior | current; current year = col -1
     _find(section, "Autonomia financeira",         [],              -1, "financial_autonomy",  "%",     "Autonomia financeira")
     _find(section, "Liquidez geral",               [],              -1, "liquidity_general",   "ratio", "Liquidez geral")
     _find(section, "Liquidez reduzida",            [],              -1, "liquidity_reduced",   "ratio", "Liquidez reduzida")
     _find(section, "Liquidez imediata",            [],              -1, "liquidity_immediate", "ratio", "Liquidez imediata")
     _find(section, "Solvabilidade",                [],              -1, "solvency",            "ratio", "Solvabilidade")
 
-    # Debt section — end-of-year total (exclude start-of-year 01/01 and the DGAL limit line)
     _find(section, "Dívida Total",   ["limite", "dgal", "01/01"],   0, "total_debt",          "€",     "Dívida Total")
     _find(section, "Limite Dívida Total DGAL",     [],               0, "debt_limit_dgal",     "€",     "Limite Dívida Total DGAL")
     _find(section, "Margem Absoluta",              [],               0, "debt_headroom",       "€",     "Margem Absoluta")
 
-    # Net result: from P&L in the full document; current year = LEFT column (col 0)
-    # Exclude the ratio formula line "Resultado Líquido/..."
+    # P&L: LEFT column = current year.
     _find(text, "Resultado líquido do período", ["resultado líquido/"], 0, "net_result", "€", "Resultado líquido do período")
 
     return ind

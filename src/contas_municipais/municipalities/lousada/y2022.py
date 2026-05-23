@@ -1,20 +1,7 @@
 """
 Parser for fiscal year 2022.
 
-Source: prestacao_contas_2022.pdf (combined, 9.0 MB, native text)
-Format: SNC-AP Relatório de Gestão
-Validated: 2026-05-18 — all revenue and expenditure values verified against PDF.
-
-Known quirks (handled explicitly here):
-- % GLB column is computed incorrectly in the source PDF (subcategory GLBs sum to >100
-  for the total row: 96.7 + 24.4 = 121.1 for revenue, 74.2 + 45.3 = 119.5 for expenditure).
-  Stored as-is from the PDF — faithful to source.
-- saldo_gerencia_anterior: no execution value shown in the PDF table (exec = None).
-- Staff: the 2022 document does not contain a "funcionários de quadro" paragraph.
-  Staff data unavailable for this year.
-- net_result: 6,162,659.33 € — from P&L LEFT column (current year = left in SNC-AP).
-  Confirmed via DAPL in same document.
-- Quadro 4 ratio columns: "2021  2022" — current (2022) = rightmost = col -1.
+Source: prestacao_contas_2022.pdf (native text), SNC-AP format
 """
 from pathlib import Path
 from contas_municipais.base import ParseResult, extract_text, find_numbers, slice_section, parse_snc_table
@@ -63,7 +50,7 @@ def parse(files: dict[str, Path]) -> ParseResult:
     result.revenue     = _parse_revenue(text)
     result.expenditure = _parse_expenditure(text)
     result.indicators  = _parse_indicators(text)
-    result.staff       = None  # not available in 2022 document
+    result.staff = None
     return result
 
 
@@ -92,19 +79,18 @@ def _parse_indicators(text: str) -> list[dict]:
                 ind.append({"year": YEAR, "indicator_key": key, "label_pt": label, "value": nums[col], "unit": unit})
                 return
 
-    # Quadro 4 ratios — "2021  2022" columns; current (2022) = col -1 (rightmost)
+    # Columns: prior | current; current year = col -1
     _find(section, "Autonomia financeira",         [],              -1, "financial_autonomy",  "%",     "Autonomia financeira")
     _find(section, "Liquidez geral",               [],              -1, "liquidity_general",   "ratio", "Liquidez geral")
     _find(section, "Liquidez reduzida",            [],              -1, "liquidity_reduced",   "ratio", "Liquidez reduzida")
     _find(section, "Liquidez imediata",            [],              -1, "liquidity_immediate", "ratio", "Liquidez imediata")
     _find(section, "Solvabilidade",                [],              -1, "solvency",            "ratio", "Solvabilidade")
 
-    # Debt section
     _find(section, "Dívida Total",   ["limite", "dgal", "01/01"],   0, "total_debt",          "€",     "Dívida Total")
     _find(section, "Limite Dívida Total DGAL",     [],               0, "debt_limit_dgal",     "€",     "Limite Dívida Total DGAL")
     _find(section, "Margem Absoluta",              [],               0, "debt_headroom",       "€",     "Margem Absoluta")
 
-    # Net result: LEFT column = current year 2022; confirmed via DAPL (6,162,659.33 €)
+    # P&L: LEFT column = current year.
     _find(text, "Resultado líquido do período", ["resultado líquido/"], 0, "net_result", "€", "Resultado líquido do período")
 
     return ind

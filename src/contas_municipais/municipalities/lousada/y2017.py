@@ -2,30 +2,7 @@
 Parser for fiscal year 2017.
 
 Source: 3466_original.pdf (168 pages, scanned), POCAL format
-Format: POCAL Relatório de Gestão + Mapas do Controlo Orçamental da Receita/Despesa
-OCR: Mistral OCR (mistral-ocr-latest) — output cached as .mistral.txt
-Validated: 2026-05-18 — all revenue and expenditure values verified against OCR text.
-
-Key decisions:
-- POCAL format (not SNC-AP): data is in "MAPA DO CONTROLO ORÇAMENTAL DA RECEITA/DESPESA",
-  not Quadro 1/Quadro 2. Numbers use dot-thousands, comma-decimal (e.g. "23.930.471,40").
-- Revenue extraction: the "cobrada_liquida" (executed) value always repeats 2+ times in each
-  row across the COBRADAS BRUTAS and COBRADA LIQUIDA columns. _rev_executed() returns the most
-  frequent value in nums[1:] after stripping the pct. OUTRAS RECEITAS DE CAPITAL has no
-  cobrada_liquida (empty cols) → executed=None. SALDO DA GERÊNCIA ANTERIOR is budget-only.
-- Expenditure uses the economic classification section only (stops before "CLASSIFICAÇÃO ORGÂNICA").
-  Columns: [budget, exerc, (futuros)?, total, despesa_paga, ...]. When no futuros (nums[1]==nums[2]):
-  despesa_paga=nums[3]. When futuros present (nums[1]!=nums[2]): despesa_paga=nums[4].
-  SUBSÍDIOS (code 05) OCR'd as "SUBSTENSOS" — matched by code "| 05 |".
-  AQUISIÇÃO DE BENS E SERVIÇOS (code 02) OCR'd as "REMO" — matched by code "| 02 |".
-  TRANSFERÊNCIAS DE CAPITAL (code 08) OCR'd as "TRANSPARÊNCIAS" — matched by code "| 08 |".
-- AQUISIÇÃO DE BENS DE CAPITAL budget: OCR garbles 7.818.059,16 as "0.638.139,16".
-  Corrected post-hoc by deriving from capital_total − (code08 + code09 + code10).
-- Indicators: ratio table has columns "2016 | 2017" — current year 2017 = nums[-1].
-  Autonomia financeira stored as value=60.73, unit="%".
-- net_result 1,350,607.36 from POCAL DR "Resultado Líquido do Exercício" (POCAL uses "Exercício",
-  not SNC-AP's "período"), left column = current year.
-- Staff: only limit/compliance table present — no headcount extracted, staff=None.
+OCR: Mistral OCR — output cached as .mistral.txt
 """
 import re
 from pathlib import Path
@@ -50,10 +27,6 @@ def find_numbers(line: str) -> list[float]:
             pass
     return out
 
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 def _rev_executed(nums: list[float]) -> float | None:
     """Return the 'cobrada_liquida' (executed) value from a POCAL revenue row.
@@ -141,10 +114,6 @@ def _find_code(section: str, code: str) -> str | None:
     return None
 
 
-# ---------------------------------------------------------------------------
-# Revenue
-# ---------------------------------------------------------------------------
-
 def _parse_revenue(text: str) -> list[dict]:
     sec = slice_section(text, "CONTROLO ORÇAMENTAL DA RECEITA", "ORÇAMENTAL DA DESPESA")
     rows = []
@@ -154,11 +123,9 @@ def _parse_revenue(text: str) -> list[dict]:
         if r:
             rows.append(r)
 
-    # Summary rows (no code prefix)
     add(_find_kw(sec, "RECEITAS CORRENTES", exclude=["OUTRAS"]),
         "receitas_correntes", "Receitas Correntes", False)
 
-    # Sub-categories by POCAL economic code
     add(_find_code(sec, "01"), "impostos_diretos",          "Impostos Directos",                    True)
     add(_find_code(sec, "02"), "impostos_indiretos",         "Impostos Indirectos",                  True)
     add(_find_code(sec, "04"), "taxas_multas",               "Taxas, Multas e Outras Penalidades",   True)
@@ -206,10 +173,6 @@ def _parse_revenue(text: str) -> list[dict]:
     return rows
 
 
-# ---------------------------------------------------------------------------
-# Expenditure
-# ---------------------------------------------------------------------------
-
 def _parse_expenditure(text: str) -> list[dict]:
     # Economic classification only — stop before the organic section
     sec = slice_section(text, "ORÇAMENTAL DA DESPESA", "CLASSIFICAÇÃO ORGÂNICA")
@@ -220,40 +183,26 @@ def _parse_expenditure(text: str) -> list[dict]:
         if r:
             rows.append(r)
 
-    # Summary rows
     add(_find_kw(sec, "DESPESAS CORRENTES", exclude=["COM O", "OUTRAS"]),
         "despesas_correntes", "Despesas Correntes", False)
 
-    # Sub-categories by POCAL code
-    # Code 01 = DESPESAS COM O PESSOAL (OCR may show "PESQUAL")
     add(_find_code(sec, "01"), "despesas_pessoal",           "Despesas com o Pessoal",              True)
-    # Code 02 = AQUISIÇÃO DE BENS E SERVIÇOS (OCR may show "REMO")
     add(_find_code(sec, "02"), "aquisicao_bens_servicos",    "Aquisição de Bens e Serviços",        True)
-    # Code 03 = JUROS E OUTROS ENCARGOS
     add(_find_code(sec, "03"), "juros_encargos",             "Juros e Outros Encargos",             True)
-    # Code 04 = TRANSFERÊNCIAS CORRENTES
     add(_find_code(sec, "04"), "transferencias_correntes_desp", "Transferências Correntes",         True)
-    # Code 05 = SUBSÍDIOS (OCR may show "SUBSTENSOS")
     add(_find_code(sec, "05"), "subsidios",                  "Subsídios",                           True)
-    # Code 06 = OUTRAS DESPESAS CORRENTES
     add(_find_code(sec, "06"), "outras_despesas_correntes",  "Outras Despesas Correntes",           True)
 
     add(_find_kw(sec, "DESPESAS DE CAPITAL"),
         "despesas_capital", "Despesas de Capital", False)
 
-    # Code 07 = AQUISIÇÃO DE BENS DE CAPITAL
-    # OCR garbles budget as "0.638.139,16" (real: 7.818.059,16). Corrected post-hoc by
-    # subtracting other capital codes from the capital total.
+    # OCR garbles code 07 budget; corrected below by deriving from capital total minus other codes.
     add(_find_code(sec, "07"), "aquisicao_bens_capital",     "Aquisição de Bens de Capital",        True)
-    # Code 08 = TRANSFERÊNCIAS DE CAPITAL (OCR may show "TRANSPARÊNCIAS")
     add(_find_code(sec, "08"), "transferencias_capital_desp","Transferências de Capital",            True)
-    # Code 09 = ACTIVOS FINANCEIROS
     add(_find_code(sec, "09"), "activos_financeiros",        "Activos Financeiros",                  True)
-    # Code 10 = PASSIVOS FINANCEIROS
     add(_find_code(sec, "10"), "passivos_financeiros_desp",  "Passivos Financeiros",                True)
 
-    # Fix code 07 budget: OCR garbles 7.818.059,16 as 0.638.139,16.
-    # Derive correctly from capital_total − (08 + 09 + 10).
+    # Derive code 07 budget from capital total minus other capital codes.
     by_cat = {r["category"]: r for r in rows}
     cap_row = by_cat.get("despesas_capital")
     cap_07  = by_cat.get("aquisicao_bens_capital")
@@ -264,7 +213,7 @@ def _parse_expenditure(text: str) -> list[dict]:
         )
         cap_07["budget_amount"] = round(cap_row["budget_amount"] - other, 2)
 
-    # Match "| ... TOTAL ... |" data row — avoids "TOTAL (6)" column-header lines.
+    # Match data row — avoids "TOTAL (6)" column-header lines.
     _total_pat = re.compile(r"\|\s+TOTAL\s+\|")
     for line in sec.split("\n"):
         if _total_pat.search(line) and find_numbers(line):
@@ -275,10 +224,6 @@ def _parse_expenditure(text: str) -> list[dict]:
 
     return rows
 
-
-# ---------------------------------------------------------------------------
-# Indicators
-# ---------------------------------------------------------------------------
 
 def _parse_indicators(text: str) -> list[dict]:
     ind = []
@@ -300,7 +245,7 @@ def _parse_indicators(text: str) -> list[dict]:
                 })
                 return
 
-    # Ratio table columns: "2016 | 2017" — current year = nums[-1]
+    # Columns: prior | current; current year = nums[-1]
     _find("Liquidez geral",      [],               -1, "liquidity_general",   "ratio", "Liquidez geral")
     _find("Liquidez reduzida",   [],               -1, "liquidity_reduced",   "ratio", "Liquidez reduzida")
     _find("Liquidez imediata",   [],               -1, "liquidity_immediate", "ratio", "Liquidez imediata")
@@ -324,16 +269,12 @@ def _parse_indicators(text: str) -> list[dict]:
                             "label_pt": "Dívida Total", "value": nums[0], "unit": "€"})
                 break
 
-    # Net result: POCAL DR "Resultado Líquido do Exercício", left column = current year (2017)
+    # LEFT column = current year
     _find("Resultado Líquido do Exercício", ["proposta", "aplicação", "reserva"],
           0, "net_result", "€", "Resultado líquido do exercício")
 
     return ind
 
-
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
 
 def parse(files: dict[str, Path]) -> ParseResult:
     pdf = files.get("prestacao_contas") or files.get("other")
@@ -350,5 +291,5 @@ def parse(files: dict[str, Path]) -> ParseResult:
     result.revenue     = _parse_revenue(text)
     result.expenditure = _parse_expenditure(text)
     result.indicators  = _parse_indicators(text)
-    result.staff       = None
+    result.staff = None
     return result

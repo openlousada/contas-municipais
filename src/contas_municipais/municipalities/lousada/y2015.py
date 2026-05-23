@@ -2,25 +2,7 @@
 Parser for fiscal year 2015.
 
 Source: 3173_original.pdf (1608 KB, scanned), POCAL format
-Format: POCAL Mapa do Controlo Orçamental da Receita + Despesa (economic classification only)
-OCR: Mistral OCR (mistral-ocr-latest) — output cached as .mistral.txt
-Validated: 2026-05-18 — all revenue and expenditure values verified against OCR text.
-
-Key decisions:
-- POCAL format (not SNC-AP). Numbers use dot-thousands, comma-decimal ("22.938.755,19").
-- OCR produces pipe-delimited markdown tables (same structure as 2017).
-- Pct values are mixed: period-decimal ("96.2", "86.94") and comma-decimal ("97,5", "93,5").
-  _PCT_PERIOD_END checked first; comma-decimal pct falls through to nums[-1] fallback.
-- Revenue executed: cobrada_líquida = mode of repeated values in nums[1:] (same as 2016/2017).
-- Expenditure executed: if nums[3] > nums[1], futuros value is explicit in the row
-  (layout: [budget, exercício, futuros, total, paga]) → paga = nums[4].
-  Otherwise futuros cell is empty, layout: [budget, exercício, total, paga] → paga = nums[3].
-  This differs from 2016/2017 "nums[2]>100" heuristic, which fails when top-level rows
-  show total>exercício due to sub-code futuros while the futuros cell itself is empty.
-- Code matching: pipe-based (r"^\\|\\s+0*CODE\\s*\\|") — same as 2017.
-- OCR garbles some labels (code 04→"TRANSPORTE CUIDADOS", code 02→"BENO E SERVIÇOS",
-  code 05→"SUBJÍDIOS") — matched by code number, not label.
-- No indicators or staff: document contains only budget execution maps, no Relatório de Gestão.
+OCR: Mistral OCR — output cached as .mistral.txt
 """
 import re
 from pathlib import Path
@@ -42,10 +24,6 @@ def find_numbers(line: str) -> list[float]:
             pass
     return out
 
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 def _rev_executed(nums: list[float]) -> float | None:
     """Return cobrada_líquida from a POCAL revenue row (mode of repeated values in nums[1:])."""
@@ -142,10 +120,6 @@ def _find_total_data(section: str) -> str | None:
     return result
 
 
-# ---------------------------------------------------------------------------
-# Revenue
-# ---------------------------------------------------------------------------
-
 def _parse_revenue(text: str) -> list[dict]:
     sec = slice_section(text, "CONTROLO ORÇAMENTAL DA RECEITA", "ORÇAMENTAL DA DESPESA")
     rows = []
@@ -185,10 +159,6 @@ def _parse_revenue(text: str) -> list[dict]:
     return rows
 
 
-# ---------------------------------------------------------------------------
-# Expenditure
-# ---------------------------------------------------------------------------
-
 def _parse_expenditure(text: str) -> list[dict]:
     sec = slice_section(text, "ORÇAMENTAL DA DESPESA", "ORGÂNI")
     rows = []
@@ -225,10 +195,6 @@ def _parse_expenditure(text: str) -> list[dict]:
     return rows
 
 
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
-
 def parse(files: dict[str, Path]) -> ParseResult:
     pdf = files.get("prestacao_contas") or files.get("other")
     if pdf is None:
@@ -244,5 +210,5 @@ def parse(files: dict[str, Path]) -> ParseResult:
     result.revenue     = _parse_revenue(text)
     result.expenditure = _parse_expenditure(text)
     result.indicators  = []
-    result.staff       = None
+    result.staff = None
     return result
