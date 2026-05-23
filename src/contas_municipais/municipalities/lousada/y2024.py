@@ -9,7 +9,7 @@ Key decisions:
 - net_result: taken from P&L "Resultado líquido do período" LEFT column (current year = left in SNC-AP).
   Confirmed via DAPL: 4,532,145.06 €
 - total_debt: "Montante Dívida Total a 31/12/2024" line; exclude "01/01" (start-of-year) line.
-- Staff: 795 + 10 outros = 805... actually 818 total, 805 permanent per PDF paragraph.
+- Staff: PDF paragraph states 805 permanent + 10 other = 815 derived total.
 """
 from pathlib import Path
 from contas_municipais.base import ParseResult, extract_text, find_numbers, slice_section, parse_snc_table

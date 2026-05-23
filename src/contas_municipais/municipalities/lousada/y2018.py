@@ -42,7 +42,7 @@ from contas_municipais.base import ParseResult, find_numbers, slice_section
 YEAR = 2018
 
 # ── Category definitions ─────────────────────────────────────────────────────
-# (budget_amount, category_key, label_pt, is_current)
+# (budget_amount, category_key, label_pt, is_subcategory)
 # Rows are located by their unique budget string within the sliced section.
 
 _REVENUE = [
@@ -167,7 +167,7 @@ def _parse_revenue(text: str) -> list[dict]:
     section = slice_section(text, "previsões corrigidas", "urgão exec")
     lines = section.split("\n")
     rows = []
-    for budget, key, label_pt, is_current in _REVENUE:
+    for budget, key, label_pt, is_subcategory in _REVENUE:
         line = _find_row(lines, budget)
         if line is None:
             print(f"[y2018] WARNING: no row found for revenue '{key}' (budget={budget})")
@@ -181,7 +181,7 @@ def _parse_revenue(text: str) -> list[dict]:
             "year": YEAR,
             "category": key,
             "label_pt": label_pt,
-            "is_current": is_current,
+            "is_subcategory": is_subcategory,
             "budget_amount": budget,
             "executed_amount": exec_,
             "execution_pct": pct,
@@ -196,7 +196,7 @@ def _parse_expenditure(text: str) -> list[dict]:
     section = slice_section(text, "controle orçamental da des", "por classificação")
     lines = section.split("\n")
     rows = []
-    for budget, key, label_pt, is_current in _EXPENDITURE:
+    for budget, key, label_pt, is_subcategory in _EXPENDITURE:
         line = _find_row(lines, budget)
         if line is None:
             print(f"[y2018] WARNING: no row found for expenditure '{key}' (budget={budget})")
@@ -211,7 +211,7 @@ def _parse_expenditure(text: str) -> list[dict]:
             "year": YEAR,
             "category": key,
             "label_pt": label_pt,
-            "is_current": is_current,
+            "is_subcategory": is_subcategory,
             "budget_amount": budget,
             "executed_amount": exec_,
             "execution_pct": pct,

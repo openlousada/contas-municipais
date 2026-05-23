@@ -18,7 +18,7 @@ Key decisions:
   Futuros present (nums[1]!=nums[2] and nums[2]>100): despesa_paga=nums[4].
 - Pct column uses period-decimal ("102.2", "90.77") — not matched by the comma-decimal
   _PT_NUM regex. Captured via _PCT_PERIOD_END fallback in _row().
-- Code matching: space-based regex (r"^\s{0,4}0*CODE\s{2,}") — not pipe-based like 2017,
+- Code matching: space-based regex (r"^\\s{0,4}0*CODE\\s{2,}") — not pipe-based like 2017,
   because pdftotext produces fixed-width columns, not markdown tables.
 - SALDO DA GERÊNCIA ANTERIOR (code 16): single number on the line (budget only).
   _rev_executed returns None (len<2) — no special casing needed.
@@ -74,7 +74,7 @@ def _exp_executed(nums: list[float]) -> float | None:
     return nums[idx] if len(nums) > idx else None
 
 
-def _row(line: str | None, year: int, slug: str, label: str, is_current: bool,
+def _row(line: str | None, year: int, slug: str, label: str, is_subcategory: bool,
          mode: str = "rev") -> dict | None:
     """Build a row dict from a matched line. mode='rev' or 'exp'."""
     if not line:
@@ -102,7 +102,7 @@ def _row(line: str | None, year: int, slug: str, label: str, is_current: bool,
         "year": year,
         "category": slug,
         "label_pt": label,
-        "is_current": is_current,
+        "is_subcategory": is_subcategory,
         "budget_amount": budget,
         "executed_amount": executed,
         "execution_pct": pct,
@@ -153,8 +153,8 @@ def _parse_revenue(text: str) -> list[dict]:
     sec = slice_section(text, "CONTROLO ORÇAMENTAL DA RECEITA", "CONTROLO ORÇAMENTAL DA DESPESA")
     rows = []
 
-    def add(line, slug, label, is_current):
-        r = _row(line, YEAR, slug, label, is_current, mode="rev")
+    def add(line, slug, label, is_subcategory):
+        r = _row(line, YEAR, slug, label, is_subcategory, mode="rev")
         if r:
             rows.append(r)
 
@@ -197,8 +197,8 @@ def _parse_expenditure(text: str) -> list[dict]:
     sec = slice_section(text, "CONTROLO ORÇAMENTAL DA DESPESA", "Orgão Deliberativo")
     rows = []
 
-    def add(line, slug, label, is_current):
-        r = _row(line, YEAR, slug, label, is_current, mode="exp")
+    def add(line, slug, label, is_subcategory):
+        r = _row(line, YEAR, slug, label, is_subcategory, mode="exp")
         if r:
             rows.append(r)
 

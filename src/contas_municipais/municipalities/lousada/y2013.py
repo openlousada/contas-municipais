@@ -87,7 +87,7 @@ def _exp_executed(nums: list[float]) -> float | None:
     return nums[3]
 
 
-def _row(line: str | None, year: int, slug: str, label: str, is_current: bool,
+def _row(line: str | None, year: int, slug: str, label: str, is_subcategory: bool,
          mode: str = "rev") -> dict | None:
     """Build a row dict from a matched line. mode='rev' or 'exp'."""
     if not line:
@@ -110,7 +110,7 @@ def _row(line: str | None, year: int, slug: str, label: str, is_current: bool,
         "year": year,
         "category": slug,
         "label_pt": label,
-        "is_current": is_current,
+        "is_subcategory": is_subcategory,
         "budget_amount": budget,
         "executed_amount": executed,
         "execution_pct": pct,
@@ -172,8 +172,8 @@ def _parse_revenue(text: str) -> list[dict]:
     sec = slice_section(text, "CONTROLO ORÇAMENTAL DA RECEITA", "CONTABILÍSTICO")
     rows = []
 
-    def add(line, slug, label, is_current):
-        r = _row(line, YEAR, slug, label, is_current, mode="rev")
+    def add(line, slug, label, is_subcategory):
+        r = _row(line, YEAR, slug, label, is_subcategory, mode="rev")
         if r:
             rows.append(r)
 
@@ -218,8 +218,8 @@ def _parse_expenditure(text: str) -> list[dict]:
     sec = slice_section(text, "ORÇAMENTAL DA DESPESA", "ORGÂNI")
     rows = []
 
-    def add(line, slug, label, is_current):
-        r = _row(line, YEAR, slug, label, is_current, mode="exp")
+    def add(line, slug, label, is_subcategory):
+        r = _row(line, YEAR, slug, label, is_subcategory, mode="exp")
         if r:
             rows.append(r)
 

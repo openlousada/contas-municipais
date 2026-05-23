@@ -89,7 +89,7 @@ def _exp_executed(nums: list[float]) -> float | None:
     return nums[idx] if len(nums) > idx else None
 
 
-def _row(line: str | None, year: int, slug: str, label: str, is_current: bool,
+def _row(line: str | None, year: int, slug: str, label: str, is_subcategory: bool,
          mode: str = "rev") -> dict | None:
     """Build a row dict from a matched OCR line. mode='rev' or 'exp'."""
     if not line:
@@ -114,7 +114,7 @@ def _row(line: str | None, year: int, slug: str, label: str, is_current: bool,
         "year": year,
         "category": slug,
         "label_pt": label,
-        "is_current": is_current,
+        "is_subcategory": is_subcategory,
         "budget_amount": budget,
         "executed_amount": executed,
         "execution_pct": pct,
@@ -149,8 +149,8 @@ def _parse_revenue(text: str) -> list[dict]:
     sec = slice_section(text, "CONTROLO ORÇAMENTAL DA RECEITA", "ORÇAMENTAL DA DESPESA")
     rows = []
 
-    def add(line, slug, label, is_current):
-        r = _row(line, YEAR, slug, label, is_current, mode="rev")
+    def add(line, slug, label, is_subcategory):
+        r = _row(line, YEAR, slug, label, is_subcategory, mode="rev")
         if r:
             rows.append(r)
 
@@ -180,7 +180,7 @@ def _parse_revenue(text: str) -> list[dict]:
         nums = find_numbers(outras_cap_line)
         rows.append({
             "year": YEAR, "category": "outras_receitas_capital",
-            "label_pt": "Outras Receitas de Capital", "is_current": True,
+            "label_pt": "Outras Receitas de Capital", "is_subcategory": True,
             "budget_amount": nums[0] if nums else None,
             "executed_amount": None, "execution_pct": None, "global_pct": None,
         })
@@ -191,7 +191,7 @@ def _parse_revenue(text: str) -> list[dict]:
         nums = find_numbers(saldo_line)
         rows.append({
             "year": YEAR, "category": "saldo_gerencia_anterior",
-            "label_pt": "Saldo da Gerência Anterior", "is_current": False,
+            "label_pt": "Saldo da Gerência Anterior", "is_subcategory": False,
             "budget_amount": nums[0] if nums else None,
             "executed_amount": None, "execution_pct": None, "global_pct": None,
         })
@@ -215,8 +215,8 @@ def _parse_expenditure(text: str) -> list[dict]:
     sec = slice_section(text, "ORÇAMENTAL DA DESPESA", "CLASSIFICAÇÃO ORGÂNICA")
     rows = []
 
-    def add(line, slug, label, is_current):
-        r = _row(line, YEAR, slug, label, is_current, mode="exp")
+    def add(line, slug, label, is_subcategory):
+        r = _row(line, YEAR, slug, label, is_subcategory, mode="exp")
         if r:
             rows.append(r)
 

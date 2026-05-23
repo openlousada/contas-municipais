@@ -25,6 +25,7 @@ from .base import (
     find_numbers,
     slice_section,
     parse_budget_table,
+    parse_snc_table,
 )
 
 __all__ = [
@@ -33,4 +34,5 @@ __all__ = [
     "find_numbers",
     "slice_section",
     "parse_budget_table",
+    "parse_snc_table",
 ]
