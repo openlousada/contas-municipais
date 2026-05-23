@@ -3,8 +3,11 @@ Parser de referência para o Município de Lousada (NIF 505279460).
 
 Cobre os exercícios fiscais de 2012 a 2024, com dois formatos:
 
-- **POCAL** (2012–2017): Mapa do Controlo Orçamental da Receita/Despesa
-- **SNC-AP** (2018–2024): Quadro 1 (receita) e Quadro 2 (despesa)
+- **POCAL** (2012–2019): Mapa do Controlo Orçamental da Receita/Despesa
+- **SNC-AP** (2020–2024): Quadro 1 (receita) e Quadro 2 (despesa)
+
+Nota: a transição nacional para SNC-AP ocorreu em 2018, mas Lousada
+manteve o formato POCAL nos exercícios de 2018 e 2019.
 
 Utilização::
 

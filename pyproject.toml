@@ -34,3 +34,6 @@ Issues = "https://github.com/openlousada/contas-municipais/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/contas_municipais"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

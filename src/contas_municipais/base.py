@@ -50,7 +50,9 @@ def extract_text(pdf_path: Path) -> str:
 
     Returns:
         Texto extraído como string. PDFs digitalizados (sem camada de texto)
-        devolvem texto vazio ou com muito ruído — ver ocr.py para esses casos.
+        devolvem texto vazio ou com muito ruído — use OCR externo e passe o
+        resultado como texto (os parsers que necessitam de OCR esperam um
+        ficheiro .mistral.txt em cache).
     """
     pdftotext = shutil.which("pdftotext")
     if pdftotext:
@@ -62,6 +64,10 @@ def extract_text(pdf_path: Path) -> str:
             return r.stdout
     with pdfplumber.open(pdf_path) as pdf:
         return "\n".join(p.extract_text() or "" for p in pdf.pages)
+
+
+# OCR-based extraction (Mistral OCR) is handled externally; year parsers that depend on it
+# expect a .mistral.txt cache file alongside the PDF.
 
 
 def find_numbers(line: str) -> list[float]:
@@ -191,3 +197,7 @@ def parse_budget_table(
             "global_pct":      nums[col_global_pct] if col_global_pct is not None and len(nums) > col_global_pct else None,
         })
     return rows
+
+
+# Backward-compatible alias used by SNC-AP year parsers (2020–2024).
+parse_snc_table = parse_budget_table
